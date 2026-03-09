@@ -24,6 +24,8 @@ public class TaskServiceImpl implements TaskService {
         Task task = Task.builder()
                 .type(request.getType())
                 .payload(request.getPayload())
+                .priority(request.getPriority())
+                .parentTaskId(request.getParentTaskId())
                 .build();
 
         Task savedTask = taskRepository.save(task);

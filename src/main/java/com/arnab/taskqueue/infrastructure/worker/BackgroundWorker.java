@@ -4,65 +4,96 @@ import com.arnab.taskqueue.application.TaskDispatcher;
 import com.arnab.taskqueue.domain.model.Task;
 import com.arnab.taskqueue.domain.model.TaskStatus;
 import com.arnab.taskqueue.domain.repository.TaskRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
 public class BackgroundWorker {
 
+    private static final Logger log = LoggerFactory.getLogger(BackgroundWorker.class);
+
     private final TaskRepository taskRepository;
     private final TaskDispatcher taskDispatcher;
 
-    @Scheduled(fixedDelay = 10000)
-    //@Transactional
+    @Scheduled(fixedDelay = 15000)
     public void processNextTask() {
 
-        System.out.println("Worker triggered");
+        List<Task> tasks = taskRepository.findNextTask(
+                TaskStatus.PENDING,
+                PageRequest.of(0,1)
+        );
 
-        Optional<Task> optionalTask =
-                taskRepository.findFirstByStatusOrderByCreatedAtAsc(TaskStatus.PENDING);
-
-        if (optionalTask.isEmpty()) {
-            System.out.println("No pending task");
+        if (tasks.isEmpty()) {
+            log.debug("No pending tasks found");
             return;
         }
 
-        Task task = optionalTask.get();
-        System.out.println("Processing task: " + task.getId());
+        Task task = tasks.get(0);
+
+        log.info("Picked task {} priority {}", task.getId(), task.getPriority());
 
         try {
+
+            UUID parentId = task.getParentTaskId();
+
+            if (parentId != null) {
+
+                Optional<Task> parentTask = taskRepository.findById(parentId);
+
+                if (parentTask.isEmpty()) {
+                    log.warn("Parent {} not found for child {}", parentId, task.getId());
+                    return;
+                }
+
+                Task parent = parentTask.get();
+
+                if (parent.getStatus() == TaskStatus.FAILED ||
+                        parent.getStatus() == TaskStatus.CANCELLED) {
+
+                    log.warn("Parent {} failed. Cancelling child {}", parentId, task.getId());
+
+                    task.setStatus(TaskStatus.CANCELLED);
+                    task.setCompletedAt(LocalDateTime.now());
+                    taskRepository.save(task);
+                    return;
+                }
+
+                if (parent.getStatus() != TaskStatus.COMPLETED) {
+                    log.info("Task {} waiting for parent {}", task.getId(), parentId);
+                    return;
+                }
+            }
+
             task.setStatus(TaskStatus.RUNNING);
             task.setStartedAt(LocalDateTime.now());
             taskRepository.save(task);
 
-            System.out.println("Task set to RUNNING");
-
             String result = taskDispatcher.dispatch(task);
-
-            System.out.println("Handler finished");
 
             task.setResult(result);
             task.setStatus(TaskStatus.COMPLETED);
             task.setCompletedAt(LocalDateTime.now());
-
             taskRepository.save(task);
 
-            System.out.println("Task set to COMPLETED");
+            log.info("Task {} completed", task.getId());
 
         } catch (Exception e) {
 
-            System.out.println("Exception occurred: " + e.getMessage());
+            log.error("Task {} failed", task.getId(), e);
 
             task.setStatus(TaskStatus.FAILED);
             task.setErrorMessage(e.getMessage());
             task.setCompletedAt(LocalDateTime.now());
-
             taskRepository.save(task);
         }
     }
