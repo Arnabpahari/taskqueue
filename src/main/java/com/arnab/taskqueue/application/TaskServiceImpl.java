@@ -26,6 +26,8 @@ public class TaskServiceImpl implements TaskService {
                 .payload(request.getPayload())
                 .priority(request.getPriority())
                 .parentTaskId(request.getParentTaskId())
+                .webhookUrl(request.getWebhookUrl())
+                .webhookSecret(request.getWebhookSecret())
                 .build();
 
         Task savedTask = taskRepository.save(task);

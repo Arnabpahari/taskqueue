@@ -20,4 +20,8 @@ public class TaskSubmissionRequest {
     private Integer priority;
 
     private UUID parentTaskId;
+
+    private String webhookUrl;
+
+    private String webhookSecret;
 }

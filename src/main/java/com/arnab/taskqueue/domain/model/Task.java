@@ -57,6 +57,14 @@ public class Task {
 
     private LocalDateTime completedAt;
 
+    private String webhookUrl;
+
+    private String webhookSecret;
+
+    private Integer webhookAttempts;
+
+    private Boolean webhookDelivered;
+
     @PrePersist
     public void prePersist() {
 
@@ -67,6 +75,9 @@ public class Task {
         if (priority == null) {
             priority = 0;
         }
+        if (webhookAttempts == null) webhookAttempts = 0;
+
+        if (webhookDelivered == null) webhookDelivered = false;
 
         createdAt = LocalDateTime.now();
         status = TaskStatus.PENDING;
